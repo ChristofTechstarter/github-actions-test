@@ -1,0 +1,58 @@
+name: DeployWorkflow
+
+on: push
+
+jobs:
+    deploy:
+        runs-on: ubuntu-latest
+        steps:
+            - name: checkout
+              uses: actions/checkout@v5
+
+            - name: ssh setup
+              run: | 
+                mkdir -p ~/.ssh
+                echo "${{secrets.SSH_PRIVATE_KEY}}" > ~/.ssh/meinPrivateKey
+                chmod 400 ~/.ssh/meinPrivateKey
+                ssh-keyscan -H ${{secrets.EC2_IP}}  >> ~/.ssh/known_hosts    
+            
+            - name: install nginx
+              run: |
+                ssh -i ~/.ssh/meinPrivateKey ubuntu@${{secrets.EC2_IP}} "sudo apt update"
+                ssh -i ~/.ssh/meinPrivateKey ubuntu@${{secrets.EC2_IP}} "sudo apt install nginx -y"
+                
+            - name: index.html für nginx bereitstellen
+              run: |
+                scp -i ~/.ssh/meinPrivateKey frontend/index.html ubuntu@${{secrets.EC2_IP}}:/home/ubuntu/index.html
+                ssh -i ~/.ssh/meinPrivateKey ubuntu@${{secrets.EC2_IP}} "sudo cp /home/ubuntu/index.html /var/www/html/index.html"
+
+    docker-test-job:
+        needs: deploy
+        runs-on: ubuntu-latest
+
+        steps:
+             - name: checkout
+               uses: actions/checkout@v5
+
+             - name: ssh setup
+               run: | 
+                mkdir -p ~/.ssh
+                echo "${{secrets.SSH_PRIVATE_KEY}}" > ~/.ssh/meinPrivateKey
+                chmod 400 ~/.ssh/meinPrivateKey
+                ssh-keyscan -H ${{secrets.EC2_IP}}  >> ~/.ssh/known_hosts 
+
+             - name: install docker
+               run: |
+                ssh -i ~/.ssh/meinPrivateKey ubuntu@${{secrets.EC2_IP}} "sudo apt update"
+                ssh -i ~/.ssh/meinPrivateKey ubuntu@${{secrets.EC2_IP}} "sudo apt install docker.io -y"
+                ssh -i ~/.ssh/meinPrivateKey ubuntu@${{secrets.EC2_IP}} "sudo usermod -aG docker ubuntu"
+               
+             - name: start frontend container on ec2 instance
+               run: |
+                  scp -i ~/.ssh/meinPrivateKey -r frontend ubuntu@${{secrets.EC2_IP}}:/home/ubuntu
+                  ssh -i ~/.ssh/meinPrivateKey ubuntu@${{secrets.EC2_IP}} "
+                    docker build -t frontend-image /home/ubuntu/frontend
+                    docker stop mein-frontend-container || true 
+                    docker rm mein-frontend-container || true 
+                    docker run -d --name mein-frontend-container -p 8081:80 frontend-image 
+                    "
