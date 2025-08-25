@@ -1,0 +1,42 @@
+name: Test und deployment vom Mehrwertsteuerrechner
+
+on : push
+
+jobs:
+    test:
+        runs-on: ubuntu-latest
+        steps:
+            - name: checkout
+              uses: actions/checkout@v5
+            
+            - name: Setup Nodejs
+              uses: actions/setup-node@v4
+              with: 
+                node-version: "20"
+
+            - name: install dependencies
+              run: |
+                cd mehrwertsteuer
+                npm install
+
+            - name: test
+              run: |
+                cd mehrwertsteuer
+                npm test
+    deploy:
+        needs: test
+        runs-on: ubuntu-latest
+        steps:
+            - name: checkout
+              uses: actions/checkout@v5
+
+            - name: ssh setup
+              run: | 
+                mkdir -p ~/.ssh
+                echo "${{secrets.SSH_PRIVATE_KEY}}" > ~/.ssh/meinPrivateKey
+                chmod 400 ~/.ssh/meinPrivateKey
+                ssh-keyscan -H ${{secrets.EC2_IP}}  >> ~/.ssh/known_hosts    
+            
+            - name: kopiere mehrwertsteuer.js zu ec2 maschine
+              run: |
+                scp -i ~/.ssh/meinPrivateKey mehrwertsteuer/mehrwertsteuer.js ubuntu@${{secrets.EC2_IP}}:/home/ubuntu
