@@ -1,5 +1,5 @@
 // Berechnet die Mehrwertsteuer für einen Betrag (z. B. 19%).
-function mwst(betrag, satz = 0.2) {
+function mwst(betrag, satz = 0.19) {
   const steuer = betrag * satz;
   // auf 2 Nachkommastellen runden (Geldbeträge)
   return Math.round(steuer * 100) / 100;
